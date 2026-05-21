@@ -1,0 +1,365 @@
+---
+title: "1. Data Preparation and ANOVA-Based Analysis"
+title-block-banner: imgs/banner.png
+---
+
+## Setup and Data Management
+
+We start by loading the key packages necessary for data manipulation and visualization, primarily relying on the `metan` package for multi-environment trial analysis.
+
+The dataset used in this example cames from the [Genomes to Fields initiative](https://datacommons.cyverse.org/browse/iplant/home/shared/commons_repo/curated/GenomesToFields_G2F_data_2023/a._2023_phenotypic_data).
+
+```{r setup}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(metan)
+library(rio)
+library(patchwork)
+# Importing a sample Multi-Environment Trial (MET) dataset
+
+df <- 
+  import("data/ge_data.csv") |> 
+  as_factor(env, gen, replicate) |> 
+  mutate(gy_ton = grain_yield * 0.0691895)
+
+glimpse(df)
+# Initial glimpse of the dataset
+```
+
+
+
+## Data Inspection and Visualization
+
+Before proceeding to formal analysis, it is essential to inspect the raw data for inconsistencies and outliers. `metan` provides convenient functions for quick inspection.
+
+```{r data-inspection}
+# Data cleaning and quality checks
+inspect(df, env, gen, gy_ton, plot = TRUE, threshold = 20)
+
+# Visualization of raw means across environments
+ge_plot(df, env, gen, gy_ton, type = 1)
+ge_plot(df, env, gen, gy_ton, type = 2)
+
+# Genotypes that performed better than the environment mean across at least 9 environments
+ge_plot(df, env, gen, gy_ton, type = 2,
+        highlight = "sum(Y > env_mean) >= 9")
+
+# Genotypes that performed poorly than the environment mean across at least 9 environments
+ge_plot(df, env, gen, gy_ton, type = 2,
+        highlight = "sum(Y < env_mean) >= 9")
+
+```
+
+## ANOVA for METs
+### Individual Analysis of Variance
+
+To run an individual Analysis of Variance (ANOVA) for each location using a Randomized Complete Block Design (RCBD, or Delineamento em Blocos Casualizados - DBC), the statistical model for a single location is expressed as:
+
+$$Y_{ij} = \mu + \tau_i + \beta_j + \varepsilon_{ij}$$
+
+Where:
+* $Y_{ij}$ is the observed response (e.g., Grain Yield) for treatment $i$ in block $j$;
+* $\mu$ is the overall mean;
+* $\tau_i$ is the effect of treatment $i$;
+* $\beta_j$ is the effect of block $j$;
+* $\varepsilon_{ij}$ is the experimental error, assuming $\varepsilon_{ij} \sim N(0, \sigma^2)$.
+
+```{r}
+# Conduct individual RCBD analyses across all environments in one line
+individual_models <- 
+  anova_ind(df,
+            env = env, 
+            gen = gen,
+            rep = replicate, 
+            resp = gy_ton)
+
+# Inspect the structured results
+gmd(individual_models)
+```
+
+
+### Joint Analysis of Variance
+
+The joint Analysis of Variance (ANOVA) is the fundamental step to partition the phenotypic variance into Genotype (G), Environment (E), and Genotype $\times$ Environment (G$\times$E) interaction effects. The joint Analysis of Variance (ANOVA) with blocks nested within environments is the standard approach for analyzing Multi-Environment Trials (MET) when individual locations are laid out in a Randomized Complete Block Design (RCBD)
+
+The statistical model for a joint ANOVA with blocks nested within environments is expressed as:
+
+$$Y_{ijk} = \mu + \alpha_i + \tau_j + (\alpha\tau)_{ij} + \beta_{k(i)} + \varepsilon_{ijk}$$
+
+Where:
+
+* $Y_{ijk}$: The observed response of genotype $j$ in block $k$ of environment $i$;
+* $\mu$: The overall grand mean;
+* $\alpha_i$: The effect of genotype $i$;
+* $\tau_j$: The effect of environment $j$;
+* $(\alpha\tau)_{ij}$: The interaction effect of genotype $i$ with environment $j$ ($G \times E$);
+* $\beta_{k(j)}$: The effect of block $k$ nested within environment $j$ (Blocks/Environments);
+* $\varepsilon_{ijk}$: The experimental residual error.
+
+
+```{r anova}
+# Executing the ANOVA model
+an <- anova_joint(df,
+                  env = env,
+                  gen = gen,
+                  rep = replicate,
+                  resp = gy_ton)
+
+# Printing the ANOVA table
+an$gy_ton$anova
+```
+
+
+
+## ANOVA-derived Stability Indexes
+### Traditional Method
+
+A simple partitioning of the interaction sum of squares for each genotype within environments.
+
+```{r traditional-stability}
+# 1. Matrix with total of genotypes
+M_sum     <- xtabs(gy_ton ~ gen + env, data = df)
+M_cells   <- xtabs(~ gen + env, data = df)
+
+# 2. Total Yield and Total Plots for each Genotype (Row totals)
+Y_i <- rowSums(M_sum, na.rm = TRUE)
+N_i <- rowSums(M_cells, na.rm = TRUE)
+
+# 3. Genotype Correction Factor (C_gen)
+# This centers the data around the specific Genotype's weighted mean
+C_gen <- (Y_i^2) / N_i
+
+# 4. Uncorrected Cell Sum of Squares
+# Squares the yield of each cell and divides by its specific plot count
+SS_cells_raw <- (M_sum^2) / M_cells
+
+# 5. Exact ENV/GEN Sum of Squares!
+# Sum the cells for each genotype and subtract the genotype's correction factor
+sqgen_env <- rowSums(SS_cells_raw, na.rm = TRUE) - C_gen
+
+# Add names for clarity
+names(sqgen_env) <- rownames(M_sum)
+
+# Print the result
+print(sqgen_env)
+
+```
+
+
+
+### Plaisted and Peterson Method (1959)
+
+The **Plaisted and Peterson (1959)** method is a classical statistical approach used in Multi-Environment Trials (MET) to characterize phenotypic stability. Its primary objective is to break down the total Genotype $\times$ Environment ($G \times E$) interaction variance component into specific individual allocations ($\theta_i$) for each tested cultivar.
+
+
+In quantitative genetics, stability can be defined under two distinct schools of thought: **Dynamic (Agronomic)** stability, where a genotype responds predictably to environmental improvement, and **Static (Biological)** stability, where a genotype exhibits a flat, unchanging performance baseline across all stress or optimal environments. 
+
+Plaisted and Peterson operates strictly on the **Static Stability** paradigm. It identifies a genotype as stable if its presence within a population minimizes the total variance of the $G \\times E$ interaction matrix. 
+
+
+Unlike methods that regress performance against an environmental index (e.g., *Eberhart & Russell* or *Finlay-Wilkinson*), Plaisted and Peterson calculates the interaction components **pairwise** between all possible dual combinations of genotypes. The cumulative index for a single cultivar is simply the arithmetic mean of all variance components generated in its pairs.
+
+The overarching stability value for genotype $i$ is calculated by averaging its pairwise interaction variance components across all remaining $(I - 1)$ cultivars:
+
+$$
+\theta_i = \frac{1}{J-1} \left[ \sum_{i'} \sigma^2_{ga_{ii'}} \right]
+$$
+
+Where:
+* $I$: Total number of genotypes evaluated in the dataset.
+* $\sigma^2_{ga_{ii'}}$: Interaction variance component isolated for the pair containing Genotype $i$ and Genotype $i'$.
+
+
+The variance component is extracted by converting the specialized pairwise interaction Sum of Squares into a Mean Square and subtracting the global experimental error (Pooled Error):
+
+$$\sigma^2_{ga_{ii'}} = \frac{\left[ \frac{SS(g_{ii'} \times A)}{J-1} \right] - QMR}{K}$$
+
+Where:
+* $SS(g_{ii'} \\times A)$: Interaction Sum of Squares between genotype $i$ and $i'$ across valid environments.
+* $J_v$: Number of environments where both genotypes are successfully present.
+* $QMR$: Pooled Residual Mean Square (Error) extracted directly from the global joint ANOVA table.
+* $K$: Effective replication count adjusted for unequal block structure via harmonic weighting.
+
+
+For classical balanced designs with flat replication $K$, the sum of squares is given by:
+
+$$SS(g_{ii'} \times A) = \frac{K}{2} \left[ d^2_{ii'} - \frac{1}{J}(Y_{i.} - Y_{i'.})^2 \right]$$
+
+
+
+
+The raw pairwise distance across the vector of environments is defined as:
+
+$$d^2_{ii'} = \sum_{j} (Y_{ij} - Y_{i'j})^2$$
+
+
+
+```{r plaisted-peterson}
+mat_cells <- xtabs(~ gen + env, data = df)
+gemat <- df |> make_mat(gen, env, gy_ton) |> as.matrix()
+I <- 20 # number of genotypes
+combs <- combn(I, 2)
+dists <- numeric(ncol(combs))
+
+# Expected Mean Square for error from ANOVA (approximate or extracted from model)
+qmr <- 
+  an$gy_ton$anova |> 
+  dplyr::filter(Source == "Residuals") |> 
+  pull(`Mean Sq`)
+
+# 3. Loop de Plaisted e Peterson com Pesos Harmônicos
+for (j in 1:ncol(combs)) {
+  genA <- combs[1, j]
+  genB <- combs[2, j]
+  
+  y_A <- gemat[genA, ]
+  y_B <- gemat[genB, ]
+  
+  n_A <- mat_cells[genA, ]
+  n_B <- mat_cells[genB, ]
+  
+  # Filtra os ambientes onde AMBOS os genótipos estão presentes (Evita NAs)
+  valid <- !is.na(y_A) & !is.na(y_B) & (n_A > 0) & (n_B > 0)
+  J_v <- sum(valid)
+  
+  if (J_v > 1) {
+    # Diferença real entre as médias no ambiente
+    D <- y_A[valid] - y_B[valid]
+    # Peso Harmônico efetivo da casela: (nA * nB) / (nA + nB)
+    W <- (n_A[valid] * n_B[valid]) / (n_A[valid] + n_B[valid])
+    sum_W <- sum(W)
+    
+    # Soma de Quadrados de GxE Exata para o Par (Ponderada)
+    SS_GE_pair <- sum(W * D^2) - (sum(W * D)^2 / sum_W)
+    
+    # Quadrado Médio de GxE do Par
+    MS_GE_pair <- SS_GE_pair / (J_v - 1)
+    
+    # Coeficiente K efetivo para extração do componente de variância
+    K_eff <- (sum_W - sum(W^2) / sum_W) / (J_v - 1)
+    
+    # Componente de variância par a par (theta_ij)
+    # Dividido por (2 * K_eff) para espelhar a álgebra do divisor 'K' original
+    dists[j] <- (MS_GE_pair - qmr) / (2 * K_eff)
+  } else {
+    dists[j] <- NA # Caso extremo de genótipos sem ambientes em comum
+  }
+}
+
+# 4. Construção da Matriz Simétrica e Resumo Final
+mat <- matrix(NA, nrow = I, ncol = I)
+mat[lower.tri(mat)] <- dists
+mat <- make_sym(mat)
+
+mat_res <- 
+  as.data.frame(mat) |>
+  mutate(theta = apply(mat, 1, mean, na.rm = TRUE),
+         theta_perc = theta / sum(theta, na.rm = TRUE) * 100)
+
+rownames(mat_res) <- rownames(gemat)
+colnames(mat_res) <- c(rownames(gemat), "theta", "theta_perc")
+
+# Ranking by stability (smaller theta_perc = more stable)
+mat_res |> 
+  select(theta, theta_perc) |> 
+  arrange(abs(theta))
+
+ra2 <- 
+  plaisted_peterson(.data = df,
+                    env = env,
+                    gen = gen,
+                    rep = replicate,
+                    resp = gy_ton)
+
+p1 <- 
+  ggplot(ra2$gy_ton, aes(theta_prop, reorder(GEN, abs(theta_prop)))) +
+  geom_col() +
+  theme_minimal() +
+  labs(x = expression(theta[i]),
+       y = "Genotype")
+
+
+p2 <- 
+  ge_plot(df, env, gen, gy_ton, type = 2,
+          highlight = "c('G20', 'G11')")
+
+p1 + p2
+
+```
+
+
+### Wricke's Ecovalence
+
+Wricke's Ecovalence ($W_i^2$) is a traditional parametric stability parameter widely used in agronomy and plant breeding to quantify the individual contribution of each genotype to the overall Genotype-by-Environment (GxE) interaction variation. Unlike superiority indices that focus on tracking maximum yield curves, ecovalence isolates the true stability of a genotype by measuring its predictability across diverse testing locations.
+
+Mathematically, it calculates the sum of squares of the **GxE interaction deviations associated with a specific genotype** across all tested environments.The biological and agronomic interpretation is straightforward: Low Ecovalence means high stability. 
+
+A lower $W_i^2$ value indicates that the genotype's response across environments closely mirrors the average response of all genotypes in the trial. It possesses minimal deviations from the main additive effects of genotype and environment, making its performance highly predictable and widely adapted. An ecovalence value of zero represents a perfectly stable genotype with zero GxE interaction contribution.
+
+A larger $W_i^2$ value indicates that the genotype is highly responsive to specific macro-environments. It contributes heavily to the trial's total GxE interaction sum of squares, pointing toward narrow or specific adaptation to certain environments.
+
+The ecovalence ($W_i^2$) for the $i$-th genotype evaluated across $E$ environments is expressed as follows:
+
+$$W_i^2 = \sum_{j=1}^{E} (Y_{ij} - \bar{Y}_{i\cdot} - \bar{Y}_{\cdot j} + \bar{Y}_{\cdot \cdot})^2$$
+
+Where:
+* $W_i^2$ is the ecovalence value of genotype $i$;
+* $Y_{ij}$ is the observed mean phenotypic value of genotype $i$ in environment $j$;
+* $\bar{Y}_{i\cdot}$ is the mean performance of genotype $i$ across all environments;
+* $\bar{Y}_{\cdot j}$ is the mean performance of all genotypes in environment $j$;
+* $\bar{Y}_{\cdot \cdot}$ is the grand mean of the entire multi-environment trial.
+
+Note on Partitioning: By definition, the sum of all individual ecovalence values equals the total GxE interaction sum of squares ($\sum W_i^2 = SS_{G\times E}$).
+
+The first step to compute $W_i^2$ is to compute the $G\times E$ interaction matrix, as follows
+
+$$
+\hat{(ga)} =Y_{ij} - \bar{Y}_{i\cdot} - \bar{Y}_{\cdot j} + \bar{Y}_{\cdot \cdot}
+$$
+
+
+
+
+```{r wricke}
+m <- mean(gemat)
+geef <- matrix(NA, nrow = nrow(gemat), ncol = ncol(gemat))
+rownames(geef) <- rownames(gemat)
+colnames(geef) <- colnames(gemat)
+
+for(j in 1:ncol(geef)){
+  for(i in 1:nrow(geef)){
+    mgi <- mean(gemat[i, ], na.rm = TRUE)
+    mej <- mean(gemat[, j], na.rm = TRUE)
+    geef[i, j] <- gemat[i, j] - mgi - mej + m
+  }
+}
+
+# Plot the interaction effects
+pge <- 
+  geef |> 
+  as.data.frame() |> 
+  rownames_to_column("GEN") |> 
+  pivot_longer(-GEN) |> 
+  ge_plot(name, GEN, value)
+
+
+# Wricke's Ecovalence by hand
+eco <- rowSums(geef^2 * mat_cells)
+
+# Using the ecovalence() function 
+eco <- ecovalence(df,
+                  env = env, 
+                  gen = gen,
+                  rep = replicate, 
+                  resp = gy_ton)
+
+peco <- 
+  ggplot(eco$gy_ton, aes(Ecoval, reorder(GEN, Ecoval))) +
+  geom_col() +
+  theme_minimal() +
+  labs(x = "Ecovalence",
+       y = "Genotype")
+
+pge + peco
+```

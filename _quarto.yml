@@ -1,0 +1,30 @@
+project:
+  type: website
+  output-dir: _site
+execute:
+  fig-width: 9
+  fig-height: 9
+website:
+  title: "MET & Stability Analysis"
+  navbar:
+    background: primary
+    left:
+      - text: "Home"
+        file: index.qmd
+      - text: "1. Data & ANOVA"
+        file: 01_anova.qmd
+      - text: "2. Univariate"
+        file: 02_univariate_methods.qmd
+      - text: "3. Multivariate"
+        file: 03_multivariate_methods.qmd
+  page-footer: "Built with Quarto & metan"
+
+format:
+  html:
+    theme:
+      light: litera
+      dark: darkly
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true

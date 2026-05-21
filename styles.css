@@ -1,0 +1,64 @@
+/* Modern Layout Overrides */
+.navbar {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.quarto-title-banner {
+  background-image: url('imgs/banner.png');
+  background-size: cover;
+  background-position: center;
+  color: white;
+  padding-top: 5rem;
+  padding-bottom: 5rem;
+  text-shadow: 1px 1px 8px rgba(0,0,0,0.8);
+  border-bottom: 4px solid #1E88E5;
+}
+
+.title {
+  font-weight: 800 !important;
+  font-size: 3rem !important;
+}
+
+main.content {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 2.5rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  margin-top: -3rem;
+  position: relative;
+  z-index: 10;
+}
+
+@media (prefers-color-scheme: dark) {
+  main.content {
+    background-color: #1e1e1e;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+}
+
+h2 {
+  color: #1E88E5;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0.5rem;
+  margin-top: 2rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  h2 {
+    color: #64B5F6;
+    border-bottom: 2px solid #333333;
+  }
+}
+
+.cell-output {
+  border-left: 3px solid #1E88E5;
+  background-color: #f8f9fa;
+  padding-left: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cell-output {
+    background-color: #2a2a2a;
+    border-left: 3px solid #64B5F6;
+  }
+}

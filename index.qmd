@@ -1,0 +1,38 @@
+---
+title: "Multi-Environment Trial Analysis"
+title-block-banner: imgs/banner.png
+---
+
+Welcome to the course on **Stability Analysis for Multi-Environment Trials (METs)**!
+
+This is comprehensive guide to understanding and implementing techniques for assessing Genotype $\times$ Environment (G$\times$E) interaction.
+
+## Package installation
+To install the `metan` package from github, you will need to have the package `pak` installed first. If you are a windows user, it is also suggested to install [R Tools](https://cran.r-project.org/bin/windows/Rtools/) to compile the package binaries.
+
+```{r}
+if (!requireNamespace("pak", quietly = TRUE)) {
+  install.packages("pak")
+}
+# Now install metan from GitHub using pak
+pak::pak("nepem-ufsc/metan")
+```
+
+
+
+## Topics Covered
+
+### 1. Data Preparation and ANOVA-Based Analysis
+- **Setup and Data Management (R):** Loading necessary packages (`metan`, `tidyverse`), importing sample MET datasets, conducting data quality checks, and visualizing raw means.
+- **ANOVA for METs:** Executing ANOVA models (individual and joint) to partition Genotype (G), Environment (E), and G$\times$E effects.
+- **ANOVA-derived Stability Indexes:** Calculating traditional indexes, Plaisted & Peterson (1959), and Wricke's Ecovalence.
+
+### 2. Univariate Stability Methods Implementation
+- **Regression-based Stability Indexes:** Fitting Finlay & Wilkinson regression models and calculating the Environmental Index (EI).
+- **Factorial Regression:** Incorporating explicit environmental covariates (e.g., thermal, hydrological, radiation) into the model using PCA and forward-stepwise selection.
+- **Lin & Binns Superiority Index:** Calculating the $P_i$ index (Loss Function) to identify stable and superior genotypes under different environmental conditions.
+
+### 3. Multivariate and Simultaneous Selection
+- **AMMI Analysis:** Fitting Additive Main Effects and Multiplicative Interaction models and generating AMMI1 and AMMI2 biplots.
+- **GGE Biplots Analysis:** Using GGE biplots for assessing mean performance vs. stability, which-won-where patterns, and test environment evaluation.
+- **Simultaneous Selection:** Implementing WAASB (Weighted Average of Absolute Scores) and WAASBY (balancing yield and stability) indices.
